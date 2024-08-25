@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
-import { LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
+import { AuthorizationType, CfnAuthorizer, LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import { PartitionKey } from 'aws-cdk-lib/aws-appsync';
+import { OAuthScope, UserPool, UserPoolClientIdentityProvider, UserPoolDomain } from 'aws-cdk-lib/aws-cognito';
 import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -14,12 +15,14 @@ export class CdkMyshopStack extends cdk.Stack {
   private createOrderLambda:NodejsFunction;
   private getOrdersLambda:NodejsFunction;
   private updateOrderLambda:NodejsFunction;
+  private userPool:UserPool;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     this.createPersistence();
     this.createCompute();
+    this.createAuthorization();
     this.createRestAPI();
   }
   private createPersistence():void {
@@ -86,17 +89,62 @@ export class CdkMyshopStack extends cdk.Stack {
       restApiName: 'Shop API'
     });
 
+    const authorizer = new CfnAuthorizer(this, 'cfnAuth', {
+      restApiId: api.restApiId,
+      name: 'CognitoAPIAuthorizer',
+      type: 'COGNITO_USER_POOLS',
+      identitySource: 'method.request.header.Authorization',
+      providerArns: [this.userPool.userPoolArn]
+    });
+
+    const authorizerOptions:any = {
+      authorizationType: AuthorizationType.COGNITO,
+      authorizer: {
+        authorizerId: authorizer.ref
+      }
+    }
     const ordersResource = api.root.addResource('orders');
 
     // POST /orders
-    ordersResource.addMethod('POST', new LambdaIntegration(this.createOrderLambda));
+    ordersResource.addMethod('POST', new LambdaIntegration(this.createOrderLambda), {...authorizerOptions});
 
     // GET /orders/
-    ordersResource.addMethod('GET', new LambdaIntegration(this.getOrdersLambda));
+    ordersResource.addMethod('GET', new LambdaIntegration(this.getOrdersLambda), {...authorizerOptions});
 
     // PUT /orders/{order_id}
     const singleOrderResource = ordersResource.addResource('{id}');
-    singleOrderResource.addMethod('PUT', new LambdaIntegration(this.updateOrderLambda));
+    singleOrderResource.addMethod('PUT', new LambdaIntegration(this.updateOrderLambda), {...authorizerOptions});
+  }
+
+  private createAuthorization():void {
+    this.userPool = new UserPool(this, 'userPool', {
+      signInAliases: {
+        email: true
+      },
+      selfSignUpEnabled: true
+    });
+
+    const client = this.userPool.addClient('MainAppClient', {
+      userPoolClientName: 'MainAppClient',
+      oAuth: {
+        flows: { implicitCodeGrant: true },
+        scopes: [OAuthScope.OPENID],
+        callbackUrls: ["https://example.com"]
+      },
+      supportedIdentityProviders: [
+        UserPoolClientIdentityProvider.COGNITO,
+      ],
+      refreshTokenValidity: cdk.Duration.days(1),
+      idTokenValidity: cdk.Duration.days(1),
+      accessTokenValidity: cdk.Duration.days(1)
+    });
+
+    new UserPoolDomain(this, "MyUserPoolDomain", {
+      userPool: this.userPool,
+      cognitoDomain: {
+        domainPrefix: 'my-shop567'
+      }
+    });
   }
 }
 
