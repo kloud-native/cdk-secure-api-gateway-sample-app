@@ -1,5 +1,5 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocument, QueryCommandOutput } from "@aws-sdk/lib-dynamodb";
 import { Order } from "../entities/order";
 
 export class DBHandler {
@@ -36,5 +36,21 @@ export class DBHandler {
       }
     };
     return this.dynamoDB.query(params);
+  }
+
+  public async getSingleOrder(orderID:string):Promise<Order> {
+    const queryResult:QueryCommandOutput = await this.dynamoDB.query({
+      TableName: this.ordersTableName,
+      KeyConditionExpression: "orderID = :order_id",
+      IndexName: "OrderIdIdx",
+      ExpressionAttributeValues: {
+        ":order_id": orderID
+      }
+    });
+    if (queryResult.Count == 0) {
+      throw new Error(`Order with OrderID: ${orderID} not found`);
+    }
+
+    return Order.fromDbRecord(queryResult.Items?.at(0));
   }
 }
