@@ -1,8 +1,22 @@
 # Welcome to your CDK TypeScript project
 
-This is a blank project for CDK development with TypeScript.
+This is a TypeScript-based CDK app.
 
 The `cdk.json` file tells the CDK Toolkit how to execute your app.
+
+## Prerequisites
+aws cli should be configured via `aws configure` (or any other method)
+
+## Deployment steps
+
+### Install dependences
+`npm install`
+
+### Compile TypeScript to JS
+`npm run build` 
+
+### Deploy
+`npx cdk deploy` 
 
 ## Useful commands
 
