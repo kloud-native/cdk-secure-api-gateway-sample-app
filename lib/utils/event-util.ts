@@ -1,5 +1,6 @@
 export class EventUtil {
   private static parseBody(event:any):any {
+    console.log("Event: ", event);
     let body = JSON.parse(event.body);
     if (!body) {
       body = {};
@@ -11,7 +12,7 @@ export class EventUtil {
   }
   public static parseEvent(event:any):{customerID: string, eventBody: any} {
     const body = EventUtil.parseBody(event);
-    const customerID = event.requestContext.authorizer.claims.sub;
+    const customerID = event.requestContext.authorizer.principalId;
     
     console.log("customerID: ", customerID);
     return {
