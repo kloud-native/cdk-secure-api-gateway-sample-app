@@ -7,12 +7,10 @@ import { NodejsFunction, NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-node
 import { Construct } from 'constructs';
 import { join } from 'path';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudfront_origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 
 const ORDERS_TABLE_NAME = 'orders';
 const SRC_IDENT_SECRET = 'SrcIdent'
@@ -114,7 +112,8 @@ export class CdkMyshopStack extends cdk.Stack {
     this.authorizerLambda = new NodejsFunction(this, 'authorizer',{
       entry: join(__dirname, 'lambdas', 'authorizer.ts'),
       ...authorizerFunctionProps
-    })
+    });
+    this.provideSecretAccessToFunction(this.authorizerLambda);
 
   }
   private createRestAPI():void {
@@ -270,17 +269,12 @@ export class CdkMyshopStack extends cdk.Stack {
     });
 
     const injectHeaderFunction = new NodejsFunction(this, 'InjectHeader', {
-      runtime: cdk.aws_lambda.Runtime.NODEJS_18_X,
+      // runtime: cdk.aws_lambda.Runtime.NODEJS_18_X,
+      runtime: Runtime.NODEJS_20_X,
       entry: join(__dirname, 'lambdas', 'inject-header.js'),
     });
     
-    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${SRC_IDENT_SECRET}*`;
-    injectHeaderFunction.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['secretsmanager:GetSecretValue'],
-        resources: [secretArn],
-      })
-    );
+    this.provideSecretAccessToFunction(injectHeaderFunction);
 
     const cachePolicy = new cloudfront.CachePolicy(this, 'MyCachePolicy', {
       headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Authorization"),
@@ -314,6 +308,16 @@ export class CdkMyshopStack extends cdk.Stack {
       description: 'The CloudFront distribution URL.',
     });
   }
+  private provideSecretAccessToFunction(nodejsFunction:NodejsFunction) {
+    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${SRC_IDENT_SECRET}*`;
+    nodejsFunction.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [secretArn],
+      })
+    );
+  }
 }
+
 
 
